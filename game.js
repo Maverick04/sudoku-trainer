@@ -14,7 +14,9 @@ const difficultyLevels = {
 
 const recordKey = "sudoku-trainer-records-v1";
 const starKey = "sudoku-trainer-stars-v1";
+const progressKey = "sudoku-trainer-progress-v1";
 const maxStoredRecords = 500;
+const maxHistory = 120;
 
 const state = {
   mode: "seedling",
@@ -27,6 +29,8 @@ const state = {
   stars: Number(localStorage.getItem(starKey) || "0"),
   showCandidates: false,
   instantFeedback: true,
+  noteMode: false,
+  history: [],
   startedAt: Date.now(),
   timer: null,
 };
@@ -43,6 +47,7 @@ const starIconsEl = document.querySelector("#starIcons");
 const starCountEl = document.querySelector("#starCount");
 const candidateToggle = document.querySelector("#candidateToggle");
 const instantToggle = document.querySelector("#instantToggle");
+const noteToggle = document.querySelector("#noteToggle");
 const recordBodyEl = document.querySelector("#recordBody");
 const toggleRecordsBtn = document.querySelector("#toggleRecordsBtn");
 const celebrationEl = document.querySelector("#celebration");
@@ -57,7 +62,9 @@ function startPuzzle() {
   state.puzzle = buildSudokuPuzzle(config);
   state.selected = state.puzzle.cells.findIndex((cell) => cell === 0);
   state.mistakes = 0;
+  state.history = [];
   state.startedAt = Date.now();
+  saveProgress();
   const boxText = config.boxRows ? `，每个 ${config.boxRows}x${config.boxCols} 小宫格也不能重复` : "";
   messageEl.textContent = `${config.name} ${difficultyLevels[state.difficulty]}：每行、每列都要有 1-${config.size}${boxText}。`;
   renderSudoku();
@@ -103,6 +110,7 @@ function buildSudokuPuzzle(config) {
     cells: solution.map((value, index) => (fixed.has(index) ? value : 0)),
     fixed,
     entries: new Map(),
+    notes: new Map(),
   };
 }
 
@@ -188,6 +196,7 @@ function renderSudoku() {
   for (let index = 0; index < size * size; index += 1) {
     const fixed = state.puzzle.fixed.has(index);
     const entry = state.puzzle.entries.get(index);
+    const manualNotes = state.puzzle.notes.get(index);
     const value = fixed ? state.puzzle.cells[index] : entry || "";
     const cell = makeButton("cell sudoku-cell", "");
     const row = Math.floor(index / size);
@@ -196,6 +205,8 @@ function renderSudoku() {
     cell.setAttribute("aria-label", `第 ${row + 1} 行第 ${col + 1} 列${value ? `，${value}` : "，空格"}`);
     if (state.puzzle.boxCols && (col + 1) % state.puzzle.boxCols === 0 && col < size - 1) cell.classList.add("box-right");
     if (state.puzzle.boxRows && (row + 1) % state.puzzle.boxRows === 0 && row < size - 1) cell.classList.add("box-bottom");
+    if (isPeer(index, state.selected)) cell.classList.add("peer");
+    if (sameValue(value)) cell.classList.add("same-value");
     if (fixed) {
       cell.classList.add("fixed");
       cell.textContent = value;
@@ -209,6 +220,8 @@ function renderSudoku() {
           cell.classList.toggle("wrong", entry !== state.puzzle.solution[index]);
           cell.classList.toggle("correct", entry === state.puzzle.solution[index]);
         }
+      } else if (manualNotes && manualNotes.size > 0) {
+        cell.appendChild(renderNoteGrid(manualNotes, size));
       } else if (state.showCandidates) {
         cell.appendChild(renderCandidateGrid(index));
       }
@@ -225,9 +238,21 @@ function renderSudoku() {
 function renderCandidateGrid(index) {
   const size = state.puzzle.size;
   const wrap = document.createElement("span");
-  wrap.className = "candidates";
+  wrap.className = "candidates auto-candidates";
   wrap.style.setProperty("--candidate-cols", Math.ceil(Math.sqrt(size)));
   for (const value of getCandidates(index)) {
+    const item = document.createElement("span");
+    item.textContent = value;
+    wrap.appendChild(item);
+  }
+  return wrap;
+}
+
+function renderNoteGrid(notes, size) {
+  const wrap = document.createElement("span");
+  wrap.className = "candidates notes";
+  wrap.style.setProperty("--candidate-cols", Math.ceil(Math.sqrt(size)));
+  for (const value of [...notes].sort((a, b) => a - b)) {
     const item = document.createElement("span");
     item.textContent = value;
     wrap.appendChild(item);
@@ -240,6 +265,14 @@ function renderPad(max) {
   padEl.dataset.max = max;
   for (let value = 1; value <= max; value += 1) {
     const button = makeButton("", value);
+    const remaining = remainingCount(value);
+    button.classList.toggle("used-up", remaining === 0);
+    const main = document.createElement("span");
+    main.textContent = value;
+    const sub = document.createElement("small");
+    sub.textContent = remaining;
+    button.textContent = "";
+    button.append(main, sub);
     button.addEventListener("click", () => enterValue(value));
     padEl.appendChild(button);
   }
@@ -259,6 +292,7 @@ function makeButton(className, text) {
 function selectCell(index) {
   if (state.puzzle.fixed.has(index)) return;
   state.selected = index;
+  saveProgress();
   renderSudoku();
 }
 
@@ -267,12 +301,52 @@ function enterValue(value) {
     messageEl.textContent = "先点一个空格，再选数字。";
     return;
   }
-  if (value === null) state.puzzle.entries.delete(state.selected);
-  else state.puzzle.entries.set(state.selected, value);
-  if (value !== null && state.instantFeedback && value !== state.puzzle.solution[state.selected]) {
+  pushHistory();
+
+  if (value === null) {
+    state.puzzle.entries.delete(state.selected);
+    state.puzzle.notes.delete(state.selected);
+  } else if (state.noteMode) {
+    state.puzzle.entries.delete(state.selected);
+    toggleNote(state.selected, value);
+  } else {
+    state.puzzle.entries.set(state.selected, value);
+    state.puzzle.notes.delete(state.selected);
+  }
+
+  if (!state.noteMode && value !== null && state.instantFeedback && value !== state.puzzle.solution[state.selected]) {
     state.mistakes += 1;
     messageEl.textContent = "这个数字和当前题目不匹配，看看同行、同列或同宫格。";
   }
+  saveProgress();
+  renderSudoku();
+}
+
+function eraseSelected() {
+  enterValue(null);
+}
+
+function toggleNote(index, value) {
+  const notes = new Set(state.puzzle.notes.get(index) || []);
+  if (notes.has(value)) notes.delete(value);
+  else notes.add(value);
+  if (notes.size === 0) state.puzzle.notes.delete(index);
+  else state.puzzle.notes.set(index, notes);
+}
+
+function pushHistory() {
+  state.history.push(snapshotPuzzle());
+  if (state.history.length > maxHistory) state.history.shift();
+}
+
+function undoMove() {
+  const snapshot = state.history.pop();
+  if (!snapshot) {
+    messageEl.textContent = "还没有可撤销的步骤。";
+    return;
+  }
+  restoreSnapshot(snapshot);
+  saveProgress();
   renderSudoku();
 }
 
@@ -308,6 +382,7 @@ function checkPuzzle() {
 
   saveRecord();
   addStar();
+  localStorage.removeItem(progressKey);
   state.streak += 1;
   state.level += 1;
   messageEl.textContent = "答对了。下一题来了。";
@@ -349,6 +424,26 @@ function closeCelebration() {
   startPuzzle();
 }
 
+function sameValue(value) {
+  if (state.selected === null || !value) return false;
+  return valueAt(state.selected) === Number(value);
+}
+
+function isPeer(index, selected) {
+  if (selected === null || index === selected) return false;
+  const size = state.puzzle.size;
+  const row = Math.floor(index / size);
+  const col = index % size;
+  const selectedRow = Math.floor(selected / size);
+  const selectedCol = selected % size;
+  if (row === selectedRow || col === selectedCol) return true;
+  if (!state.puzzle.boxRows || !state.puzzle.boxCols) return false;
+  return (
+    Math.floor(row / state.puzzle.boxRows) === Math.floor(selectedRow / state.puzzle.boxRows) &&
+    Math.floor(col / state.puzzle.boxCols) === Math.floor(selectedCol / state.puzzle.boxCols)
+  );
+}
+
 function getCandidates(index) {
   const size = state.puzzle.size;
   const row = Math.floor(index / size);
@@ -372,6 +467,11 @@ function getCandidates(index) {
 function valueAt(index) {
   if (state.puzzle.fixed.has(index)) return state.puzzle.cells[index];
   return state.puzzle.entries.get(index) || 0;
+}
+
+function remainingCount(value) {
+  const used = state.puzzle.cells.filter((cell) => cell === value).length + [...state.puzzle.entries.values()].filter((entry) => entry === value).length;
+  return Math.max(0, state.puzzle.size - used);
 }
 
 function findStepHint() {
@@ -460,6 +560,75 @@ function saveRecord() {
   renderRecords();
 }
 
+function snapshotPuzzle() {
+  return {
+    entries: [...state.puzzle.entries],
+    notes: [...state.puzzle.notes].map(([index, values]) => [index, [...values]]),
+    selected: state.selected,
+    mistakes: state.mistakes,
+    startedAt: state.startedAt,
+  };
+}
+
+function restoreSnapshot(snapshot) {
+  state.puzzle.entries = new Map(snapshot.entries);
+  state.puzzle.notes = new Map(snapshot.notes.map(([index, values]) => [index, new Set(values)]));
+  state.selected = snapshot.selected;
+  state.mistakes = snapshot.mistakes;
+  state.startedAt = snapshot.startedAt;
+}
+
+function saveProgress() {
+  if (!state.puzzle) return;
+  const payload = {
+    mode: state.mode,
+    difficulty: state.difficulty,
+    puzzle: {
+      size: state.puzzle.size,
+      boxRows: state.puzzle.boxRows,
+      boxCols: state.puzzle.boxCols,
+      solution: state.puzzle.solution,
+      cells: state.puzzle.cells,
+      fixed: [...state.puzzle.fixed],
+      entries: [...state.puzzle.entries],
+      notes: [...state.puzzle.notes].map(([index, values]) => [index, [...values]]),
+    },
+    selected: state.selected,
+    mistakes: state.mistakes,
+    level: state.level,
+    streak: state.streak,
+    startedAt: state.startedAt,
+    elapsed: elapsedSeconds(),
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(progressKey, JSON.stringify(payload));
+}
+
+function loadProgress() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(progressKey) || "null");
+    if (!payload || !payload.puzzle) return false;
+    state.mode = payload.mode || "seedling";
+    state.difficulty = payload.difficulty || "easy";
+    state.puzzle = {
+      ...payload.puzzle,
+      fixed: new Set(payload.puzzle.fixed),
+      entries: new Map(payload.puzzle.entries),
+      notes: new Map((payload.puzzle.notes || []).map(([index, values]) => [index, new Set(values)])),
+    };
+    state.selected = payload.selected;
+    state.mistakes = payload.mistakes || 0;
+    state.level = payload.level || 1;
+    state.streak = payload.streak || 0;
+    state.startedAt = Date.now() - (payload.elapsed || 0) * 1000;
+    state.history = [];
+    return true;
+  } catch {
+    localStorage.removeItem(progressKey);
+    return false;
+  }
+}
+
 function renderRecords() {
   const records = loadRecords();
   recordListEl.innerHTML = "";
@@ -531,6 +700,8 @@ document.querySelectorAll(".difficulty").forEach((button) => {
 document.querySelector("#checkBtn").addEventListener("click", checkPuzzle);
 document.querySelector("#hintBtn").addEventListener("click", showHint);
 document.querySelector("#newBtn").addEventListener("click", startPuzzle);
+document.querySelector("#undoBtn").addEventListener("click", undoMove);
+document.querySelector("#eraseBtn").addEventListener("click", eraseSelected);
 document.querySelector("#clearRecordsBtn").addEventListener("click", () => {
   localStorage.removeItem(recordKey);
   renderRecords();
@@ -545,12 +716,26 @@ instantToggle.addEventListener("change", () => {
   state.instantFeedback = instantToggle.checked;
   renderSudoku();
 });
+noteToggle.addEventListener("change", () => {
+  state.noteMode = noteToggle.checked;
+  messageEl.textContent = state.noteMode ? "笔记模式：点数字会记录候选数，不会直接填入答案。" : "已回到填写模式。";
+});
 toggleRecordsBtn.addEventListener("click", () => {
   recordBodyEl.classList.toggle("hidden");
   toggleRecordsBtn.textContent = recordBodyEl.classList.contains("hidden") ? "做题记录 ▸" : "做题记录 ▾";
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() === "n") {
+    noteToggle.checked = !noteToggle.checked;
+    state.noteMode = noteToggle.checked;
+    return;
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    undoMove();
+    return;
+  }
   if (/^[1-9]$/.test(event.key)) enterValue(Number(event.key));
   if (event.key === "Backspace" || event.key === "Delete") enterValue(null);
   if (state.selected === null) return;
@@ -560,8 +745,25 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "ArrowRight") state.selected = Math.min(size * size - 1, state.selected + 1);
   if (event.key === "ArrowUp") state.selected = Math.max(0, state.selected - size);
   if (event.key === "ArrowDown") state.selected = Math.min(size * size - 1, state.selected + size);
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) renderSudoku();
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    saveProgress();
+    renderSudoku();
+  }
+});
+
+window.addEventListener("beforeunload", saveProgress);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveProgress();
 });
 
 state.timer = setInterval(tick, 1000);
-startPuzzle();
+if (loadProgress()) {
+  document.querySelectorAll(".mode").forEach((item) => item.classList.toggle("active", item.dataset.mode === state.mode));
+  document.querySelectorAll(".difficulty").forEach((item) => item.classList.toggle("active", item.dataset.difficulty === state.difficulty));
+  messageEl.textContent = "已恢复上次未完成的题。";
+  renderSudoku();
+  renderRecords();
+  tick();
+} else {
+  startPuzzle();
+}

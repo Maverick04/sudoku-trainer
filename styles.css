@@ -188,9 +188,18 @@ h1 {
   cursor: pointer;
 }
 
+.cell.peer {
+  background: #fff1cf;
+}
+
+.cell.same-value {
+  background: #d8eadc;
+}
+
 .cell.selected {
   outline: 5px solid color-mix(in srgb, var(--focus), transparent 35%);
   outline-offset: 2px;
+  background: #fffdf4;
 }
 
 .cell.wrong {
@@ -223,6 +232,14 @@ h1 {
 
 .candidates span {
   min-width: 0;
+}
+
+.notes {
+  color: #2c5f9f;
+}
+
+.auto-candidates {
+  color: color-mix(in srgb, var(--leaf-dark), transparent 28%);
 }
 
 .panel {
@@ -287,7 +304,7 @@ button:focus-visible,
 
 .toggle-group {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -328,10 +345,40 @@ button:focus-visible,
 }
 
 .pad button {
+  position: relative;
   aspect-ratio: 1.15;
   min-height: 0;
-  font-size: 1.6rem;
+  display: grid;
+  place-items: center;
   background: #ffffff;
+}
+
+.pad button span {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.pad button small {
+  position: absolute;
+  right: 7px;
+  bottom: 4px;
+  color: var(--leaf-dark);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.pad button.used-up {
+  opacity: 0.42;
+}
+
+.pad button.used-up small {
+  color: var(--muted);
+}
+
+.tool-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .actions {
@@ -556,13 +603,32 @@ button:focus-visible,
     padding: 12px;
   }
 
-  .toggle-group,
   .actions {
     grid-template-columns: 1fr;
   }
 
+  .toggle-group {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .toggle-group label {
+    min-height: 40px;
+    gap: 4px;
+    font-size: 0.86rem;
+  }
+
   .pad {
     gap: 6px;
+  }
+
+  .pad button span {
+    font-size: 1.35rem;
+  }
+
+  .pad button small {
+    right: 5px;
+    bottom: 3px;
+    font-size: 0.68rem;
   }
 
   .record-head {
