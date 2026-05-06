@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>进阶数独</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="playfield" aria-labelledby="game-title">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">7 岁数独训练</p>
+            <h1 id="game-title">进阶数独</h1>
+          </div>
+          <div class="score-strip" aria-label="游戏状态">
+            <div>
+              <span>关卡</span>
+              <strong id="levelText">1</strong>
+            </div>
+            <div>
+              <span>用时</span>
+              <strong id="timerText">00:00</strong>
+            </div>
+            <div>
+              <span>连对</span>
+              <strong id="streakText">0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="garden-wrap">
+          <svg class="garden-art" viewBox="0 0 760 520" aria-hidden="true">
+            <path d="M42 381C96 301 158 283 232 327c43 26 74 31 124 1 89-53 165-39 230 35 38 43 82 61 132 52v105H42V381Z" fill="#b6d7a8" />
+            <path d="M0 436c72-38 132-43 181-14 63 38 126 40 190 8 72-36 138-31 199 14 44 32 108 38 190 17v59H0v-84Z" fill="#76b58c" />
+            <circle cx="98" cy="124" r="54" fill="#f4c14d" />
+            <path d="M106 308c5-46 26-82 64-108 35 30 51 69 48 117-40 13-77 10-112-9Z" fill="#5f9f7b" />
+            <path d="M571 287c7-51 32-91 75-119 39 33 58 77 55 130-45 15-88 11-130-11Z" fill="#4f8e71" />
+            <path d="M381 283c1-39 15-72 43-98 31 21 50 51 58 91-30 22-64 25-101 7Z" fill="#8ca86a" />
+          </svg>
+
+          <div class="board-shell">
+            <div class="board sudoku-board" id="board" aria-label="数独棋盘"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" aria-label="控制面板">
+        <div class="mode-group" role="group" aria-label="数独尺寸">
+          <button class="mode active" data-mode="seedling">5x5</button>
+          <button class="mode" data-mode="sprout">6x6</button>
+          <button class="mode" data-mode="bloom">7x7</button>
+          <button class="mode" data-mode="fruit">8x8</button>
+          <button class="mode" data-mode="master">9x9</button>
+        </div>
+
+        <div class="difficulty-group" role="group" aria-label="难度">
+          <button class="difficulty active" data-difficulty="easy">简单</button>
+          <button class="difficulty" data-difficulty="normal">中等</button>
+          <button class="difficulty" data-difficulty="hard">困难</button>
+        </div>
+
+        <div class="message" id="message" aria-live="polite">
+          每行、每列都不能重复。
+        </div>
+
+        <div class="pad" id="numberPad" aria-label="数字键盘"></div>
+
+        <div class="actions">
+          <button id="checkBtn" class="primary">检查</button>
+          <button id="hintBtn">提示</button>
+          <button id="newBtn">新题</button>
+        </div>
+
+        <div class="records" aria-label="做题记录">
+          <div class="record-head">
+            <strong>做题记录</strong>
+            <div class="record-actions">
+              <button id="exportRecordsBtn" type="button">导出</button>
+              <button id="clearRecordsBtn" type="button">清空</button>
+            </div>
+          </div>
+          <div class="record-best" id="bestRecord">还没有完成记录</div>
+          <ol id="recordList"></ol>
+        </div>
+
+        <div class="parent-note">
+          <strong>玩法设计</strong>
+          <p>尺寸决定数字范围和宫格规则，难度决定初始已知格数量。5/7 练行列排除，6/8/9 增加小宫格。</p>
+        </div>
+      </aside>
+    </main>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
