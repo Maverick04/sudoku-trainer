@@ -13,6 +13,7 @@ const difficultyLevels = {
 };
 
 const recordKey = "sudoku-trainer-records-v1";
+const starKey = "sudoku-trainer-stars-v1";
 const maxStoredRecords = 500;
 
 const state = {
@@ -23,6 +24,9 @@ const state = {
   level: 1,
   streak: 0,
   mistakes: 0,
+  stars: Number(localStorage.getItem(starKey) || "0"),
+  showCandidates: false,
+  instantFeedback: true,
   startedAt: Date.now(),
   timer: null,
 };
@@ -35,6 +39,14 @@ const timerText = document.querySelector("#timerText");
 const streakText = document.querySelector("#streakText");
 const bestRecordEl = document.querySelector("#bestRecord");
 const recordListEl = document.querySelector("#recordList");
+const starIconsEl = document.querySelector("#starIcons");
+const starCountEl = document.querySelector("#starCount");
+const candidateToggle = document.querySelector("#candidateToggle");
+const instantToggle = document.querySelector("#instantToggle");
+const recordBodyEl = document.querySelector("#recordBody");
+const toggleRecordsBtn = document.querySelector("#toggleRecordsBtn");
+const celebrationEl = document.querySelector("#celebration");
+const celebrationTextEl = document.querySelector("#celebrationText");
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
@@ -175,8 +187,9 @@ function renderSudoku() {
 
   for (let index = 0; index < size * size; index += 1) {
     const fixed = state.puzzle.fixed.has(index);
-    const value = fixed ? state.puzzle.cells[index] : state.puzzle.entries.get(index) || "";
-    const cell = makeButton("cell sudoku-cell", value);
+    const entry = state.puzzle.entries.get(index);
+    const value = fixed ? state.puzzle.cells[index] : entry || "";
+    const cell = makeButton("cell sudoku-cell", "");
     const row = Math.floor(index / size);
     const col = index % size;
     cell.dataset.index = index;
@@ -185,9 +198,20 @@ function renderSudoku() {
     if (state.puzzle.boxRows && (row + 1) % state.puzzle.boxRows === 0 && row < size - 1) cell.classList.add("box-bottom");
     if (fixed) {
       cell.classList.add("fixed");
+      cell.textContent = value;
       cell.disabled = true;
     } else {
       cell.classList.add("empty");
+      if (entry) {
+        cell.textContent = entry;
+        cell.classList.add("user-filled");
+        if (state.instantFeedback) {
+          cell.classList.toggle("wrong", entry !== state.puzzle.solution[index]);
+          cell.classList.toggle("correct", entry === state.puzzle.solution[index]);
+        }
+      } else if (state.showCandidates) {
+        cell.appendChild(renderCandidateGrid(index));
+      }
       if (state.selected === index) cell.classList.add("selected");
       cell.addEventListener("click", () => selectCell(index));
     }
@@ -196,6 +220,19 @@ function renderSudoku() {
 
   renderPad(size);
   syncStats();
+}
+
+function renderCandidateGrid(index) {
+  const size = state.puzzle.size;
+  const wrap = document.createElement("span");
+  wrap.className = "candidates";
+  wrap.style.setProperty("--candidate-cols", Math.ceil(Math.sqrt(size)));
+  for (const value of getCandidates(index)) {
+    const item = document.createElement("span");
+    item.textContent = value;
+    wrap.appendChild(item);
+  }
+  return wrap;
 }
 
 function renderPad(max) {
@@ -232,6 +269,10 @@ function enterValue(value) {
   }
   if (value === null) state.puzzle.entries.delete(state.selected);
   else state.puzzle.entries.set(state.selected, value);
+  if (value !== null && state.instantFeedback && value !== state.puzzle.solution[state.selected]) {
+    state.mistakes += 1;
+    messageEl.textContent = "这个数字和当前题目不匹配，看看同行、同列或同宫格。";
+  }
   renderSudoku();
 }
 
@@ -266,22 +307,122 @@ function checkPuzzle() {
   }
 
   saveRecord();
+  addStar();
   state.streak += 1;
   state.level += 1;
   messageEl.textContent = "答对了。下一题来了。";
   syncStats();
-  setTimeout(startPuzzle, 850);
+  showCelebration();
 }
 
 function showHint() {
-  const config = currentConfig();
-  const boxText = config.boxRows ? "；宫格里也不能重复" : "";
-  messageEl.textContent = `先找某一行或某一列缺了哪些数字${boxText}。`;
+  const hint = findStepHint();
+  messageEl.textContent = hint.text;
+  if (hint.index !== null) state.selected = hint.index;
+  renderSudoku();
 }
 
 function syncStats() {
   levelText.textContent = state.level;
   streakText.textContent = state.streak;
+  renderStars();
+}
+
+function renderStars() {
+  const filled = Math.min(state.stars, 5);
+  starIconsEl.textContent = "★".repeat(filled) + "☆".repeat(5 - filled);
+  starCountEl.textContent = state.stars;
+}
+
+function addStar() {
+  state.stars += 1;
+  localStorage.setItem(starKey, String(state.stars));
+}
+
+function showCelebration() {
+  celebrationTextEl.textContent = `${sudokuModes[state.mode].name} ${difficultyLevels[state.difficulty]}，用时 ${formatTime(elapsedSeconds())}，错 ${state.mistakes} 次。`;
+  celebrationEl.classList.remove("hidden");
+}
+
+function closeCelebration() {
+  celebrationEl.classList.add("hidden");
+  startPuzzle();
+}
+
+function getCandidates(index) {
+  const size = state.puzzle.size;
+  const row = Math.floor(index / size);
+  const col = index % size;
+  const used = new Set();
+
+  for (let c = 0; c < size; c += 1) used.add(valueAt(row * size + c));
+  for (let r = 0; r < size; r += 1) used.add(valueAt(r * size + col));
+
+  if (state.puzzle.boxRows && state.puzzle.boxCols) {
+    const startRow = Math.floor(row / state.puzzle.boxRows) * state.puzzle.boxRows;
+    const startCol = Math.floor(col / state.puzzle.boxCols) * state.puzzle.boxCols;
+    for (let r = startRow; r < startRow + state.puzzle.boxRows; r += 1) {
+      for (let c = startCol; c < startCol + state.puzzle.boxCols; c += 1) used.add(valueAt(r * size + c));
+    }
+  }
+
+  return Array.from({ length: size }, (_, value) => value + 1).filter((value) => !used.has(value));
+}
+
+function valueAt(index) {
+  if (state.puzzle.fixed.has(index)) return state.puzzle.cells[index];
+  return state.puzzle.entries.get(index) || 0;
+}
+
+function findStepHint() {
+  const size = state.puzzle.size;
+  for (let index = 0; index < size * size; index += 1) {
+    if (state.puzzle.fixed.has(index) || state.puzzle.entries.has(index)) continue;
+    const candidates = getCandidates(index);
+    if (candidates.length === 1) {
+      const row = Math.floor(index / size) + 1;
+      const col = index % size + 1;
+      return { index, text: `第 ${row} 行第 ${col} 列只剩 ${candidates[0]} 可以填。` };
+    }
+  }
+
+  const groups = buildGroups();
+  for (const group of groups) {
+    for (let value = 1; value <= size; value += 1) {
+      const places = group.indexes.filter((index) =>
+        !state.puzzle.fixed.has(index) && !state.puzzle.entries.has(index) && getCandidates(index).includes(value),
+      );
+      if (places.length === 1) {
+        const index = places[0];
+        const row = Math.floor(index / size) + 1;
+        const col = index % size + 1;
+        return { index, text: `${group.name} 里，数字 ${value} 只能放在第 ${row} 行第 ${col} 列。` };
+      }
+    }
+  }
+
+  return { index: state.selected, text: "这一题暂时没有简单一步提示。可以打开候选数，先找候选最少的格子。" };
+}
+
+function buildGroups() {
+  const size = state.puzzle.size;
+  const groups = [];
+  for (let row = 0; row < size; row += 1) groups.push({ name: `第 ${row + 1} 行`, indexes: Array.from({ length: size }, (_, col) => row * size + col) });
+  for (let col = 0; col < size; col += 1) groups.push({ name: `第 ${col + 1} 列`, indexes: Array.from({ length: size }, (_, row) => row * size + col) });
+  if (state.puzzle.boxRows && state.puzzle.boxCols) {
+    let box = 1;
+    for (let row = 0; row < size; row += state.puzzle.boxRows) {
+      for (let col = 0; col < size; col += state.puzzle.boxCols) {
+        const indexes = [];
+        for (let r = row; r < row + state.puzzle.boxRows; r += 1) {
+          for (let c = col; c < col + state.puzzle.boxCols; c += 1) indexes.push(r * size + c);
+        }
+        groups.push({ name: `第 ${box} 宫`, indexes });
+        box += 1;
+      }
+    }
+  }
+  return groups;
 }
 
 function tick() {
@@ -395,6 +536,19 @@ document.querySelector("#clearRecordsBtn").addEventListener("click", () => {
   renderRecords();
 });
 document.querySelector("#exportRecordsBtn").addEventListener("click", exportRecords);
+document.querySelector("#celebrationBtn").addEventListener("click", closeCelebration);
+candidateToggle.addEventListener("change", () => {
+  state.showCandidates = candidateToggle.checked;
+  renderSudoku();
+});
+instantToggle.addEventListener("change", () => {
+  state.instantFeedback = instantToggle.checked;
+  renderSudoku();
+});
+toggleRecordsBtn.addEventListener("click", () => {
+  recordBodyEl.classList.toggle("hidden");
+  toggleRecordsBtn.textContent = recordBodyEl.classList.contains("hidden") ? "做题记录 ▸" : "做题记录 ▾";
+});
 
 document.addEventListener("keydown", (event) => {
   if (/^[1-9]$/.test(event.key)) enterValue(Number(event.key));
