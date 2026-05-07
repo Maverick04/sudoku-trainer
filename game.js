@@ -907,7 +907,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") saveProgress();
 });
 
-state.timer = setInterval(tick, 1000);
+state.timer = setInterval(tick, 250);
 if (loadProgress()) {
   document.querySelectorAll(".mode").forEach((item) => item.classList.toggle("active", item.dataset.mode === state.mode));
   document.querySelectorAll(".difficulty").forEach((item) => item.classList.toggle("active", item.dataset.difficulty === state.difficulty));
