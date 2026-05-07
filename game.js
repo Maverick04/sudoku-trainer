@@ -32,6 +32,10 @@ const state = {
   noteMode: false,
   history: [],
   feedbackIndex: null,
+  correctIndex: null,
+  correctRun: 0,
+  completed: false,
+  audioContext: null,
   startedAt: Date.now(),
   timer: null,
 };
@@ -53,6 +57,8 @@ const recordBodyEl = document.querySelector("#recordBody");
 const toggleRecordsBtn = document.querySelector("#toggleRecordsBtn");
 const celebrationEl = document.querySelector("#celebration");
 const celebrationTextEl = document.querySelector("#celebrationText");
+const confettiEl = document.querySelector("#confetti");
+const encouragementEl = document.querySelector("#encouragement");
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
@@ -64,6 +70,8 @@ function startPuzzle() {
   state.selected = state.puzzle.cells.findIndex((cell) => cell === 0);
   state.mistakes = 0;
   state.history = [];
+  state.correctRun = 0;
+  state.completed = false;
   state.startedAt = Date.now();
   saveProgress();
   const boxText = config.boxRows ? `，每个 ${config.boxRows}x${config.boxCols} 小宫格也不能重复` : "";
@@ -222,6 +230,7 @@ function renderSudoku() {
           cell.classList.toggle("correct", entry === state.puzzle.solution[index]);
         }
         if (state.feedbackIndex === index) cell.classList.add("feedback-flash");
+        if (state.correctIndex === index) cell.classList.add("correct-pop");
       } else if (manualNotes && manualNotes.size > 0) {
         cell.appendChild(renderNoteGrid(manualNotes, size));
       } else if (state.showCandidates) {
@@ -303,6 +312,7 @@ function canEditSelected() {
 }
 
 function enterValue(value) {
+  unlockAudio();
   if (!canEditSelected()) {
     messageEl.textContent = "先点一个空格，再选数字。";
     return;
@@ -322,14 +332,24 @@ function enterValue(value) {
 
   if (!state.noteMode && value !== null && state.instantFeedback && value !== state.puzzle.solution[state.selected]) {
     state.mistakes += 1;
+    state.correctRun = 0;
     state.feedbackIndex = state.selected;
     messageEl.textContent = "这个数字和当前题目不匹配，看看同行、同列或同宫格。";
+    playMistakeSound();
     setTimeout(() => {
       state.feedbackIndex = null;
       renderSudoku();
     }, 480);
   } else if (!state.noteMode && value !== null && state.instantFeedback) {
+    state.correctRun += 1;
+    state.correctIndex = state.selected;
     messageEl.textContent = "这个格子填对了。";
+    playCorrectSound(state.correctRun);
+    showCorrectEncouragement(state.correctRun);
+    setTimeout(() => {
+      state.correctIndex = null;
+      renderSudoku();
+    }, 520);
   }
   saveProgress();
   renderSudoku();
@@ -337,6 +357,7 @@ function enterValue(value) {
 }
 
 function eraseSelected() {
+  unlockAudio();
   if (!canEditSelected()) {
     messageEl.textContent = "先点一个要擦除的空格。";
     return;
@@ -368,6 +389,7 @@ function pushHistory() {
 }
 
 function undoMove() {
+  unlockAudio();
   const snapshot = state.history.pop();
   if (!snapshot) {
     messageEl.textContent = "还没有可撤销的步骤。";
@@ -380,6 +402,7 @@ function undoMove() {
 }
 
 function checkPuzzle() {
+  unlockAudio();
   const result = puzzleResult();
   markCurrentErrors();
 
@@ -422,6 +445,7 @@ function markCurrentErrors() {
 }
 
 function maybeAutoFinish() {
+  if (state.completed) return;
   const result = puzzleResult();
   if (!result.allFilled) return;
   markCurrentErrors();
@@ -430,6 +454,8 @@ function maybeAutoFinish() {
 }
 
 function finishPuzzle() {
+  if (state.completed) return;
+  state.completed = true;
   saveRecord();
   addStar();
   localStorage.removeItem(progressKey);
@@ -437,6 +463,7 @@ function finishPuzzle() {
   state.level += 1;
   messageEl.textContent = "答对了。下一题来了。";
   syncStats();
+  playFinishSound();
   showCelebration();
 }
 
@@ -466,12 +493,77 @@ function addStar() {
 
 function showCelebration() {
   celebrationTextEl.textContent = `${sudokuModes[state.mode].name} ${difficultyLevels[state.difficulty]}，用时 ${formatTime(elapsedSeconds())}，错 ${state.mistakes} 次。`;
+  renderConfetti();
   celebrationEl.classList.remove("hidden");
 }
 
 function closeCelebration() {
+  unlockAudio();
   celebrationEl.classList.add("hidden");
   startPuzzle();
+}
+
+function showCorrectEncouragement(run) {
+  if (run < 2) return;
+  const messages = ["连续 2 个", "连续 3 个，很稳", "连续 4 个", "手感来了"];
+  encouragementEl.textContent = messages[Math.min(run - 2, messages.length - 1)];
+  encouragementEl.classList.remove("hidden", "encouragement-pop");
+  requestAnimationFrame(() => encouragementEl.classList.add("encouragement-pop"));
+  setTimeout(() => encouragementEl.classList.add("hidden"), 920);
+}
+
+function renderConfetti() {
+  confettiEl.innerHTML = "";
+  for (let index = 0; index < 34; index += 1) {
+    const piece = document.createElement("i");
+    piece.style.setProperty("--x", `${Math.random() * 220 - 110}px`);
+    piece.style.setProperty("--y", `${Math.random() * 180 + 60}px`);
+    piece.style.setProperty("--r", `${Math.random() * 540 - 270}deg`);
+    piece.style.setProperty("--delay", `${Math.random() * 0.18}s`);
+    piece.style.setProperty("--c", ["#f2b84b", "#4c9b72", "#255d8a", "#cf5c56"][index % 4]);
+    confettiEl.appendChild(piece);
+  }
+}
+
+function unlockAudio() {
+  if (!window.AudioContext && !window.webkitAudioContext) return null;
+  if (!state.audioContext) {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    state.audioContext = new Context();
+  }
+  if (state.audioContext.state === "suspended") state.audioContext.resume();
+  return state.audioContext;
+}
+
+function playTone(frequency, start, duration, type = "sine", volume = 0.08) {
+  const audio = unlockAudio();
+  if (!audio) return;
+  const oscillator = audio.createOscillator();
+  const gain = audio.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, audio.currentTime + start);
+  gain.gain.setValueAtTime(0.0001, audio.currentTime + start);
+  gain.gain.exponentialRampToValueAtTime(volume, audio.currentTime + start + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + start + duration);
+  oscillator.connect(gain);
+  gain.connect(audio.destination);
+  oscillator.start(audio.currentTime + start);
+  oscillator.stop(audio.currentTime + start + duration + 0.03);
+}
+
+function playCorrectSound(run) {
+  const lift = Math.min(run, 5) * 28;
+  playTone(620 + lift, 0, 0.09, "triangle", 0.055);
+  playTone(820 + lift, 0.06, 0.11, "triangle", 0.048);
+}
+
+function playMistakeSound() {
+  playTone(190, 0, 0.14, "sawtooth", 0.035);
+}
+
+function playFinishSound() {
+  [523, 659, 784, 1047].forEach((frequency, index) => playTone(frequency, index * 0.1, 0.18, "triangle", 0.07));
+  playTone(1319, 0.42, 0.28, "sine", 0.06);
 }
 
 function sameValue(value) {
@@ -650,6 +742,7 @@ function saveProgress() {
     mistakes: state.mistakes,
     level: state.level,
     streak: state.streak,
+    correctRun: state.correctRun,
     startedAt: state.startedAt,
     elapsed: elapsedSeconds(),
     history: state.history,
@@ -674,6 +767,8 @@ function loadProgress() {
     state.mistakes = payload.mistakes || 0;
     state.level = payload.level || 1;
     state.streak = payload.streak || 0;
+    state.correctRun = payload.correctRun || 0;
+    state.completed = false;
     state.startedAt = Date.now() - (payload.elapsed || 0) * 1000;
     state.history = payload.history || [];
     return true;

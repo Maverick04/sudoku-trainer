@@ -234,8 +234,27 @@ h1 {
   background: #d9efd7;
 }
 
+.cell.correct-pop {
+  animation: correct-pop 0.46s ease;
+}
+
 .cell.feedback-flash {
   animation: mistake-pulse 0.42s ease;
+}
+
+@keyframes correct-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.13);
+    box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--leaf), transparent 45%), 0 7px 16px color-mix(in srgb, var(--leaf-dark), transparent 75%);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes mistake-pulse {
@@ -538,12 +557,15 @@ button:focus-visible,
 }
 
 .celebration-card {
+  position: relative;
+  overflow: hidden;
   width: min(360px, 100%);
   padding: 26px;
   border: 4px solid var(--soil);
   background: var(--paper);
   box-shadow: 10px 12px 0 color-mix(in srgb, var(--soil), transparent 35%);
   text-align: center;
+  animation: celebration-rise 0.42s cubic-bezier(0.2, 1.35, 0.35, 1);
 }
 
 .celebration-mark {
@@ -558,6 +580,7 @@ button:focus-visible,
   color: #fffdf4;
   font-size: 2.4rem;
   font-weight: 900;
+  animation: star-spin 0.8s ease both;
 }
 
 .celebration-card h2 {
@@ -576,6 +599,108 @@ button:focus-visible,
   width: 100%;
   background: var(--leaf);
   color: #fffdf4;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--c);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  animation: confetti-fall 1.25s ease-out var(--delay) forwards;
+}
+
+.encouragement {
+  position: fixed;
+  left: 50%;
+  top: 18px;
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 12px 18px;
+  border: 3px solid var(--soil);
+  background: var(--sun);
+  color: #fffdf4;
+  box-shadow: 6px 8px 0 color-mix(in srgb, var(--soil), transparent 45%);
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.encouragement-pop {
+  animation: encouragement-pop 0.9s ease both;
+}
+
+@keyframes celebration-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.88);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes star-spin {
+  0% {
+    transform: rotate(-18deg) scale(0.6);
+  }
+
+  55% {
+    transform: rotate(14deg) scale(1.18);
+  }
+
+  100% {
+    transform: rotate(0) scale(1);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7) rotate(0deg);
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x)), var(--y)) scale(1) rotate(var(--r));
+  }
+}
+
+@keyframes encouragement-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.9);
+  }
+
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.08);
+  }
+
+  74% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -14px) scale(0.96);
+  }
 }
 
 @media (max-width: 860px) {
