@@ -349,7 +349,7 @@ function enterValue(value) {
     setTimeout(() => {
       state.correctIndex = null;
       renderSudoku();
-    }, 520);
+    }, 950);
   }
   saveProgress();
   renderSudoku();
@@ -514,12 +514,12 @@ function showCorrectEncouragement(run) {
 
 function renderConfetti() {
   confettiEl.innerHTML = "";
-  for (let index = 0; index < 34; index += 1) {
+  for (let index = 0; index < 74; index += 1) {
     const piece = document.createElement("i");
-    piece.style.setProperty("--x", `${Math.random() * 220 - 110}px`);
-    piece.style.setProperty("--y", `${Math.random() * 180 + 60}px`);
-    piece.style.setProperty("--r", `${Math.random() * 540 - 270}deg`);
-    piece.style.setProperty("--delay", `${Math.random() * 0.18}s`);
+    piece.style.setProperty("--x", `${Math.random() * 360 - 180}px`);
+    piece.style.setProperty("--y", `${Math.random() * 260 + 80}px`);
+    piece.style.setProperty("--r", `${Math.random() * 900 - 450}deg`);
+    piece.style.setProperty("--delay", `${Math.random() * 0.38}s`);
     piece.style.setProperty("--c", ["#f2b84b", "#4c9b72", "#255d8a", "#cf5c56"][index % 4]);
     confettiEl.appendChild(piece);
   }
@@ -553,8 +553,9 @@ function playTone(frequency, start, duration, type = "sine", volume = 0.08) {
 
 function playCorrectSound(run) {
   const lift = Math.min(run, 5) * 28;
-  playTone(620 + lift, 0, 0.09, "triangle", 0.055);
-  playTone(820 + lift, 0.06, 0.11, "triangle", 0.048);
+  playTone(659 + lift, 0, 0.1, "triangle", 0.06);
+  playTone(880 + lift, 0.07, 0.12, "triangle", 0.055);
+  playTone(1175 + lift, 0.16, 0.16, "sine", 0.04);
 }
 
 function playMistakeSound() {
@@ -562,8 +563,9 @@ function playMistakeSound() {
 }
 
 function playFinishSound() {
-  [523, 659, 784, 1047].forEach((frequency, index) => playTone(frequency, index * 0.1, 0.18, "triangle", 0.07));
-  playTone(1319, 0.42, 0.28, "sine", 0.06);
+  [523, 659, 784, 1047, 1319].forEach((frequency, index) => playTone(frequency, index * 0.09, 0.2, "triangle", 0.075));
+  playTone(1568, 0.46, 0.32, "sine", 0.062);
+  playTone(1047, 0.52, 0.38, "triangle", 0.035);
 }
 
 function sameValue(value) {
