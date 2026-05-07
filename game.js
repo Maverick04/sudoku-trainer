@@ -31,6 +31,7 @@ const state = {
   instantFeedback: true,
   noteMode: false,
   history: [],
+  feedbackIndex: null,
   startedAt: Date.now(),
   timer: null,
 };
@@ -205,7 +206,7 @@ function renderSudoku() {
     cell.setAttribute("aria-label", `第 ${row + 1} 行第 ${col + 1} 列${value ? `，${value}` : "，空格"}`);
     if (state.puzzle.boxCols && (col + 1) % state.puzzle.boxCols === 0 && col < size - 1) cell.classList.add("box-right");
     if (state.puzzle.boxRows && (row + 1) % state.puzzle.boxRows === 0 && row < size - 1) cell.classList.add("box-bottom");
-    if (isPeer(index, state.selected)) cell.classList.add("peer");
+    addPeerClasses(cell, index);
     if (sameValue(value)) cell.classList.add("same-value");
     if (fixed) {
       cell.classList.add("fixed");
@@ -220,6 +221,7 @@ function renderSudoku() {
           cell.classList.toggle("wrong", entry !== state.puzzle.solution[index]);
           cell.classList.toggle("correct", entry === state.puzzle.solution[index]);
         }
+        if (state.feedbackIndex === index) cell.classList.add("feedback-flash");
       } else if (manualNotes && manualNotes.size > 0) {
         cell.appendChild(renderNoteGrid(manualNotes, size));
       } else if (state.showCandidates) {
@@ -296,8 +298,12 @@ function selectCell(index) {
   renderSudoku();
 }
 
+function canEditSelected() {
+  return state.selected !== null && state.puzzle && !state.puzzle.fixed.has(state.selected);
+}
+
 function enterValue(value) {
-  if (state.selected === null || state.puzzle.fixed.has(state.selected)) {
+  if (!canEditSelected()) {
     messageEl.textContent = "先点一个空格，再选数字。";
     return;
   }
@@ -316,14 +322,36 @@ function enterValue(value) {
 
   if (!state.noteMode && value !== null && state.instantFeedback && value !== state.puzzle.solution[state.selected]) {
     state.mistakes += 1;
+    state.feedbackIndex = state.selected;
     messageEl.textContent = "这个数字和当前题目不匹配，看看同行、同列或同宫格。";
+    setTimeout(() => {
+      state.feedbackIndex = null;
+      renderSudoku();
+    }, 480);
+  } else if (!state.noteMode && value !== null && state.instantFeedback) {
+    messageEl.textContent = "这个格子填对了。";
   }
   saveProgress();
   renderSudoku();
+  maybeAutoFinish();
 }
 
 function eraseSelected() {
-  enterValue(null);
+  if (!canEditSelected()) {
+    messageEl.textContent = "先点一个要擦除的空格。";
+    return;
+  }
+  const hasContent = state.puzzle.entries.has(state.selected) || state.puzzle.notes.has(state.selected);
+  if (!hasContent) {
+    messageEl.textContent = "这个格子已经是空的。";
+    return;
+  }
+  pushHistory();
+  state.puzzle.entries.delete(state.selected);
+  state.puzzle.notes.delete(state.selected);
+  messageEl.textContent = "已擦除当前格。";
+  saveProgress();
+  renderSudoku();
 }
 
 function toggleNote(index, value) {
@@ -346,11 +374,31 @@ function undoMove() {
     return;
   }
   restoreSnapshot(snapshot);
+  messageEl.textContent = "已撤销上一步。";
   saveProgress();
   renderSudoku();
 }
 
 function checkPuzzle() {
+  const result = puzzleResult();
+  markCurrentErrors();
+
+  if (!result.allFilled) {
+    messageEl.textContent = "还有空格没填完。";
+    return;
+  }
+  if (!result.allCorrect) {
+    state.streak = 0;
+    state.mistakes += 1;
+    messageEl.textContent = "有不对的格子，红色处再想想。";
+    syncStats();
+    return;
+  }
+
+  finishPuzzle();
+}
+
+function puzzleResult() {
   let allFilled = true;
   let allCorrect = true;
 
@@ -361,25 +409,27 @@ function checkPuzzle() {
     if (value !== state.puzzle.solution[index]) allCorrect = false;
   }
 
+  return { allFilled, allCorrect };
+}
+
+function markCurrentErrors() {
   document.querySelectorAll(".sudoku-cell.empty").forEach((cell) => {
     const index = Number(cell.dataset.index);
     const value = state.puzzle.entries.get(index);
     cell.classList.toggle("correct", value === state.puzzle.solution[index]);
     cell.classList.toggle("wrong", Boolean(value) && value !== state.puzzle.solution[index]);
   });
+}
 
-  if (!allFilled) {
-    messageEl.textContent = "还有空格没填完。";
-    return;
-  }
-  if (!allCorrect) {
-    state.streak = 0;
-    state.mistakes += 1;
-    messageEl.textContent = "有不对的格子，红色处再想想。";
-    syncStats();
-    return;
-  }
+function maybeAutoFinish() {
+  const result = puzzleResult();
+  if (!result.allFilled) return;
+  markCurrentErrors();
+  if (result.allCorrect) finishPuzzle();
+  else messageEl.textContent = "已经填满了，还有红色格子需要再改。";
+}
 
+function finishPuzzle() {
   saveRecord();
   addStar();
   localStorage.removeItem(progressKey);
@@ -429,19 +479,22 @@ function sameValue(value) {
   return valueAt(state.selected) === Number(value);
 }
 
-function isPeer(index, selected) {
-  if (selected === null || index === selected) return false;
+function addPeerClasses(cell, index) {
+  if (state.selected === null || index === state.selected) return;
   const size = state.puzzle.size;
   const row = Math.floor(index / size);
   const col = index % size;
-  const selectedRow = Math.floor(selected / size);
-  const selectedCol = selected % size;
-  if (row === selectedRow || col === selectedCol) return true;
-  if (!state.puzzle.boxRows || !state.puzzle.boxCols) return false;
-  return (
+  const selectedRow = Math.floor(state.selected / size);
+  const selectedCol = state.selected % size;
+  if (row === selectedRow) cell.classList.add("row-peer");
+  if (col === selectedCol) cell.classList.add("col-peer");
+  if (!state.puzzle.boxRows || !state.puzzle.boxCols) return;
+  if (
     Math.floor(row / state.puzzle.boxRows) === Math.floor(selectedRow / state.puzzle.boxRows) &&
     Math.floor(col / state.puzzle.boxCols) === Math.floor(selectedCol / state.puzzle.boxCols)
-  );
+  ) {
+    cell.classList.add("box-peer");
+  }
 }
 
 function getCandidates(index) {
@@ -599,6 +652,7 @@ function saveProgress() {
     streak: state.streak,
     startedAt: state.startedAt,
     elapsed: elapsedSeconds(),
+    history: state.history,
     savedAt: Date.now(),
   };
   localStorage.setItem(progressKey, JSON.stringify(payload));
@@ -621,7 +675,7 @@ function loadProgress() {
     state.level = payload.level || 1;
     state.streak = payload.streak || 0;
     state.startedAt = Date.now() - (payload.elapsed || 0) * 1000;
-    state.history = [];
+    state.history = payload.history || [];
     return true;
   } catch {
     localStorage.removeItem(progressKey);

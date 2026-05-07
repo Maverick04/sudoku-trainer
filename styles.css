@@ -188,27 +188,73 @@ h1 {
   cursor: pointer;
 }
 
-.cell.peer {
-  background: #fff1cf;
-}
-
-.cell.same-value {
-  background: #d8eadc;
-}
-
 .cell.selected {
   outline: 5px solid color-mix(in srgb, var(--focus), transparent 35%);
   outline-offset: 2px;
-  background: #fffdf4;
+  background: #fffdf4 !important;
+  box-shadow: inset 0 0 0 4px #f2d06b;
+}
+
+.cell.row-peer,
+.cell.row-peer.fixed,
+.cell.row-peer.empty {
+  background: #ffe7a8;
+}
+
+.cell.col-peer,
+.cell.col-peer.fixed,
+.cell.col-peer.empty {
+  background: #d4ecff;
+}
+
+.cell.box-peer,
+.cell.box-peer.fixed,
+.cell.box-peer.empty {
+  background: #e5d8ff;
+}
+
+.cell.row-peer.col-peer,
+.cell.row-peer.box-peer,
+.cell.col-peer.box-peer {
+  background: #ffd48a;
+}
+
+.cell.same-value {
+  border-color: var(--focus);
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--focus), transparent 72%);
 }
 
 .cell.wrong {
   background: #f7d5cf;
   border-color: var(--berry);
+  color: #7e2d2a;
 }
 
 .cell.correct {
   background: #d9efd7;
+}
+
+.cell.feedback-flash {
+  animation: mistake-pulse 0.42s ease;
+}
+
+@keyframes mistake-pulse {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-4px);
+    box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--berry), transparent 55%);
+  }
+
+  40%,
+  80% {
+    transform: translateX(4px);
+    box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--berry), transparent 55%);
+  }
 }
 
 .cell.user-filled {
