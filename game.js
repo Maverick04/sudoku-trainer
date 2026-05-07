@@ -918,3 +918,29 @@ if (loadProgress()) {
 } else {
   startPuzzle();
 }
+
+if (new URLSearchParams(window.location.search).has("test")) {
+  window.__sudokuTest = {
+    pickEditable() {
+      const index = state.puzzle.cells.findIndex((cell, current) => cell === 0 && !state.puzzle.fixed.has(current));
+      const correct = state.puzzle.solution[index];
+      const wrong = correct === 1 ? 2 : 1;
+      return { index, correct, wrong };
+    },
+    prepareOneMissing() {
+      const editable = state.puzzle.cells
+        .map((cell, index) => ({ cell, index }))
+        .filter(({ index }) => !state.puzzle.fixed.has(index));
+      const target = editable[editable.length - 1].index;
+      for (const { index } of editable) {
+        if (index === target) continue;
+        state.puzzle.entries.set(index, state.puzzle.solution[index]);
+      }
+      state.puzzle.entries.delete(target);
+      state.selected = target;
+      state.completed = false;
+      renderSudoku();
+      return { index: target, correct: state.puzzle.solution[target] };
+    },
+  };
+}
